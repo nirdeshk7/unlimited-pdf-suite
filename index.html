@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>UnlimitedPDFSuite</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; background:#0b1020; color:#eaf0ff; }
+    header { padding: 24px; background: linear-gradient(90deg,#1e2b57,#2a3d87); box-shadow: 0 2px 16px rgba(0,0,0,0.2); }
+    h1 { margin: 0; font-size: 24px; }
+    .container { padding: 24px; max-width: 1100px; margin: auto; }
+    .card { background: #151c33; border:1px solid #23305c; border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.2); }
+    label { display:block; margin: 8px 0 4px; font-size:14px; opacity:0.9;}
+    input, select, textarea, button { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #2a3d87; background:#0b1020; color:#eaf0ff; box-sizing: border-box; margin-bottom: 12px;}
+    button { background: #007bff; border-color: #007bff; cursor: pointer; transition: background 0.3s; }
+    button:hover { background: #0056b3; }
+    #result { margin-top: 20px; padding: 15px; border-radius: 8px; background: #1e2b57; }
+    .success { color: #5cb85c; font-weight: bold; }
+    .error { color: #d9534f; font-weight: bold; }
+    .row { display: flex; gap: 16px; align-items: flex-end; }
+    .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .pill { background: #007bff; color: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; display: inline-block; margin-bottom: 10px; }
+    .hint { font-size: 12px; opacity: 0.7; margin-top: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1>UnlimitedPDFSuite 🚀 (v3 - Self-hosted PDF Tools)</h1>
+    </div>
+  </header>
+  <div class="container">
+    <div class="card">
+      <label for="tool">1. Select Tool (Kaam Chunain)</label>
+      <select id="tool" onchange="renderOptions()">
+        <option value="merge">Merge PDFs (PDFs ko Jodein)</option>
+        <option value="alt-merge">Alternating Merge (A1, B1, A2, B2…)</option>
+        <option value="split">Split PDF (PDF ko Baantein)</option>
+        <option value="rotate">Rotate Pages (Pages Ghumayein)</option>
+        <option value="reorder">Reorder Pages (Pages ka Kram Badlein)</option>
+        <option value="delete">Delete Pages (Pages Hataein)</option>
+        <option value="to-pdf">Convert to PDF (PDF mein Badlein)</option>
+        <option value="from-pdf">Convert from PDF (PDF se Badlein)</option>
+<option value="pdf2docx">PDF → DOCX (Beta)</option>
+        <option value="ocr">OCR (Searchable PDF Banayein)</option>
+        <option value="compress">Compress PDF (Size Chhota Karein)</option>
+        <option value="nup">N-up (Multiple per Sheet)</option>
+        <option value="booklet">Booklet Layout</option>
+        <option value="set-pass">Set Password / Permissions</option>
+        <option value="unlock-pass">Unlock Password (Sahi Password se)</option>
+        <option value="header-footer">Add Header/Footer</option>
+        <option value="bookmarks">Create Bookmarks (Merge & Bookmark)</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <label for="files">2. Select Files</label>
+      <input type="file" id="files" multiple onchange="checkFileCount()" />
+      <p class="hint" id="file-hint">Select files based on the chosen tool.</p>
+    </div>
+
+    <div class="card">
+      <label>3. Tool Options</label>
+      <div id="options"></div>
+      <button onclick="run()">4. Run Operation</button>
+      <div id="result"></div>
+    </div>
+  </div>
+  
+  <script>
+    const $ = id => document.getElementById(id);
+
+    const templates = {
+      "merge": `<div class="pill">Organize</div><p class="hint">Merge multiple PDF files into one. Upload files in the desired order.</p>`,
+      "alt-merge": `<div class="pill">Organize</div><p class="hint">Interleave pages from two PDFs: A1, B1, A2, B2…. Please upload <b>exactly two</b> files (A then B).</p>`,
+      "split": `<div class="pill">Organize</div><label>Page Ranges (Comma-separated)</label><input id="ranges" type="text" placeholder="Example: 1-3, 5, 9-12"/><p class="hint">Splits the single uploaded PDF into multiple files based on the ranges you specify.</p>`,
+      "rotate": `<div class="pill">Organize</div><label>Rotation Angle</label><select id="rotation"><option value="90">90° (Right)</option><option value="180">180° (Upside Down)</option><option value="270">-90° (Left)</option></select><p class="hint">Rotates all pages of the single uploaded PDF.</p>`,
+      "reorder": `<div class="pill">Organize</div><label>New Page Order (0-indexed)</label><input id="order" type="text" placeholder="Example: 2, 0, 1, 3 (for 4 pages)"/><p class="hint">Reorders pages of the single uploaded PDF.</p>`,
+      "delete": `<div class="pill">Organize</div><label>Pages to Delete (0-indexed)</label><input id="indices" type="text" placeholder="Example: 0, 5, 6"/><p class="hint">Deletes the pages of the uploaded PDF.</p>`,
+      "to-pdf": `<div class="pill">Convert</div><p class="hint">Convert multiple documents or images to a single merged PDF.</p>`,
+      "from-pdf": `<div class="pill">Convert</div><label>Convert To</label><select id="to"><option value="images">Images (PNG/JPG)</option><option value="text">Text (.txt)</option></select><div id="image-options"><label>Image Format</label><select id="fmt"><option value="png">PNG</option><option value="jpeg">JPG</option></select><label>DPI (Resolution)</label><input id="dpi" type="number" value="200"/></div><p class="hint">Note: Accurate PDF→Word/Excel conversion is NOT supported (only text extraction).</p>`,
+      "ocr": `<div class="pill">Optimization</div><label>Language (Tesseract Code)</label><input id="lang" type="text" value="eng"/><p class="hint">Use 'eng', 'hin', 'hin+eng', etc.</p>`,
+      "compress": `<div class="pill">Optimization</div><label>DPI</label><input id="dpi" type="number" value="150"/><label><input type="checkbox" id="grayscale" checked/> Grayscale</label><p class="hint">Simple compression by rasterizing and downscaling.</p>`,
+      "nup": `<div class="pill">Layout / Imposition</div><div class="row-3"><div><label>Columns</label><input id="cols" type="number" value="2"/></div><div><label>Rows</label><input id="rows" type="number" value="2"/></div><div><label>Margin (mm)</label><input id="margin_mm" type="number" value="5"/></div></div>`,
+      "booklet": `<div class="pill">Layout / Imposition</div><label>Margin (mm)</label><input id="margin_mm" type="number" value="5"/>`,
+      "set-pass": `<div class="pill">Security</div><label>User (Open) Password</label><input id="user_pass" type="password"/><label>Owner Password (Optional)</label><input id="owner_pass" type="password"/><label><input type="checkbox" id="allow_printing" checked/> Allow Printing</label><label><input type="checkbox" id="allow_copy" checked/> Allow Copy</label><label><input type="checkbox" id="allow_modify" checked/> Allow Modify</label>`,
+      "unlock-pass": `<div class="pill">Security</div><label>Password to Unlock</label><input id="password" type="password"/>`,
+      "header-footer": `<div class="pill">Layout / View</div><label>Header Text (use {page})</label><input id="header" type="text" placeholder="Confidential"/><label>Footer Text (use {page})</label><input id="footer" type="text" placeholder="Page {page}"/><label>Font Size</label><input id="font_size" type="number" value="10"/>`,
+      "bookmarks": `<div class="pill">Layout / View</div><p class="hint">Merges PDFs and creates top-level bookmarks from filenames.</p>`
+    
+      , "pdf2docx": `<div class="pill">Convert</div>
+        <p class="hint">Convert a PDF to an editable .docx (best-effort). Complex layouts may differ.</p>
+        <label><input type="checkbox" id="ocr"/> OCR pre-pass (better for scanned PDFs)</label>
+        <label>OCR Language (e.g., eng, hin, eng+hin)</label><input id="ocr_lang" type="text" value="eng"/>
+        <label>Layout Mode</label><select id="mode"><option value="auto">auto</option><option value="lines">lines</option><option value="paragraph">paragraph</option><option value="table">table</option></select>`
+    };
+
+    function checkFileCount() {
+      const tool = $('tool').value;
+      const files = $('files').files.length;
+      const hint = $('file-hint');
+      hint.style.color = 'white';
+      if (['merge','to-pdf','bookmarks'].includes(tool)) {
+        hint.innerHTML = files < 2 ? 'Please select at least 2 files.' : `Selected ${files} files.`;
+      } else if (tool === 'alt-merge') {
+        if (files !== 2) { hint.innerHTML = '⚠️ Select exactly two files (A then B)'; hint.style.color='#d9534f'; }
+        else hint.innerHTML = 'Selected 2 files (A and B).';
+      } else {
+        if (files !== 1) { hint.innerHTML = '⚠️ Select exactly one file.'; hint.style.color='#d9534f'; }
+        else hint.innerHTML = 'Selected 1 file.';
+      }
+    }
+
+    function renderOptions() {
+      const tool = $('tool').value;
+      $('options').innerHTML = templates[tool];
+      checkFileCount();
+      if (tool === 'from-pdf') {
+        $('to').addEventListener('change', () => {
+          $('image-options').style.display = $('to').value === 'images' ? 'block' : 'none';
+        });
+        $('image-options').style.display = $('to').value === 'images' ? 'block' : 'none';
+      }
+    }
+
+    async function run() {
+      const tool = $('tool').value;
+      const files = $('files').files;
+      const result = $('result');
+      let url = "";
+      const form = new FormData();
+      result.innerHTML = "Processing...";
+
+      try {
+        if (files.length === 0) throw new Error("Please select files first.");
+
+        if (tool === "merge") {
+          url = "/api/merge";
+          for (const f of files) form.append("files", f);
+        } else if (tool === "alt-merge") {
+          url = "/api/merge/alternating";
+          if (files.length !== 2) throw new Error("Select exactly two files.");
+          form.append("file_a", files[0]); form.append("file_b", files[1]);
+        } else if (tool === "split") {
+          url = "/api/split";
+          form.append("file", files[0]); form.append("ranges", $("ranges").value);
+        } else if (tool === "rotate") {
+          url = "/api/rotate";
+          form.append("file", files[0]); form.append("rotation", $("rotation").value);
+        } else if (tool === "reorder") {
+          url = "/api/reorder";
+          form.append("file", files[0]); form.append("order", $("order").value);
+        } else if (tool === "delete") {
+          url = "/api/delete-pages";
+          form.append("file", files[0]); form.append("indices", $("indices").value);
+        } else if (tool === "set-pass") {
+          url = "/api/password/set";
+          form.append("file", files[0]);
+          form.append("user_pass", $("user_pass").value);
+          form.append("owner_pass", $("owner_pass").value);
+          form.append("allow_printing", $("allow_printing")?.checked);
+          form.append("allow_copy", $("allow_copy")?.checked);
+          form.append("allow_modify", $("allow_modify")?.checked);
+        } else if (tool === "unlock-pass") {
+          url = "/api/password/unlock";
+          form.append("file", files[0]); form.append("password", $("password").value);
+        } else if (tool === "header-footer") {
+          url = "/api/header-footer";
+          form.append("file", files[0]);
+          form.append("header", $("header").value);
+          form.append("footer", $("footer").value);
+          form.append("font_size", $("font_size").value);
+        } else if (tool === "bookmarks") {
+          url = "/api/bookmarks/from-filenames";
+          if (files.length < 2) throw new Error("Select at least 2 files.");
+          for (const f of files) form.append("files", f);
+        } else if (tool === "to-pdf") {
+          url = "/api/convert/to-pdf";
+          for (const f of files) form.append("files", f);
+        } else if (tool === "from-pdf") {
+          // handled above
+        } else if (tool === "pdf2docx") {
+          url = "/api/convert/pdf-to-docx";
+          if (files.length !== 1) throw new Error("Please select exactly one PDF.");
+          form.append("file", files[0]);
+          form.append("ocr", document.getElementById("ocr")?.checked ? "true" : "false");
+          form.append("ocr_lang", document.getElementById("ocr_lang")?.value || "");
+          form.append("mode", document.getElementById("mode")?.value || "auto");
+
+          url = "/api/convert/from-pdf";
+          form.append("file", files[0]);
+          form.append("to", $("to").value);
+          form.append("dpi", $("dpi")?.value || "200");
+          form.append("fmt", $("fmt")?.value || "png");
+        } else if (tool === "ocr") {
+          url = "/api/ocr";
+          form.append("file", files[0]); form.append("lang", $("lang").value);
+        } else if (tool === "compress") {
+          url = "/api/compress";
+          form.append("file", files[0]);
+          form.append("dpi", $("dpi").value);
+          form.append("grayscale", $("grayscale").checked);
+        } else if (tool === "nup") {
+          url = "/api/layout/nup";
+          form.append("file", files[0]);
+          form.append("cols", $("cols").value); form.append("rows", $("rows").value);
+          form.append("margin_mm", $("margin_mm").value);
+        } else if (tool === "booklet") {
+          url = "/api/layout/booklet";
+          form.append("file", files[0]); form.append("margin_mm", $("margin_mm").value);
+        } else {
+          throw new Error("Unknown tool");
+        }
+
+        const resp = await fetch(url, { method: "POST", body: form });
+        const data = await resp.json();
+
+        if (!resp.ok) throw new Error(data.detail || "Processing failed.");
+
+        result.innerHTML = "<div class='success'>Done ✅</div>";
+        if (data.file) result.innerHTML += `<p><a href="${data.file}" download>Download result</a></p>`;
+        if (data.files) result.innerHTML += `<ul>` + data.files.map(f=>`<li><a href="${f}" download>Download file</a></li>`).join("") + `</ul>`;
+        if (!data.file && !data.files) result.innerHTML += `<p class="hint">No output returned.</p>`;
+
+      } catch (e) {
+        result.innerHTML = `<div class='error'>Error ❌</div><p>${e.message}</p>`;
+      }
+    }
+
+    window.onload = renderOptions;
+  </script>
+</body>
+</html>

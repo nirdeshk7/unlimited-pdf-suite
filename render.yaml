@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: unlimitedpdfsuite
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    healthCheckPath: /
+    # Optional: persistent disk (enable via dashboard or uncomment below)
+    # disks:
+    #   - name: outputs
+    #     mountPath: /app/backend/output
+    #     sizeGB: 10
